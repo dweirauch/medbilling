@@ -3,7 +3,7 @@ const stripe = require('../stripeClient');
 const { pool } = require('../db');
 const asyncHandler = require('../asyncHandler');
 const { fulfillCheckoutSession, isUuid } = require('../fulfill');
-const { REPORT_PRICE_CENTS, CURRENCY, SUCCESS_PATH, CANCEL_PATH } = require('../config');
+const { REPORT_PRICE_CENTS, CURRENCY, SUCCESS_PATH, CANCEL_PATH, REFUND_NOTICE } = require('../config');
 
 const router = express.Router();
 
@@ -69,6 +69,8 @@ router.post('/', asyncHandler(async (req, res) => {
       metadata: { reportId },
       description: 'ClaimScrub full report',
     },
+    // The no-refund policy, shown right above Stripe's Pay button.
+    custom_text: { submit: { message: REFUND_NOTICE } },
     success_url: `${frontendUrl}${SUCCESS_PATH}?reportId=${reportId}&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${frontendUrl}${CANCEL_PATH}?canceled=true&reportId=${reportId}`,
   });

@@ -3,6 +3,10 @@ module.exports = {
   REPORT_PRICE_CENTS: 2000, // $20.00 flat — never a percentage of anything.
   CURRENCY: 'usd',
 
+  // Shown on Stripe's payment page, just above the Pay button (Markdown allowed,
+  // up to 1,200 characters). Keep it in line with the Terms of Service.
+  REFUND_NOTICE: '**All sales are final — no refunds.** Your ClaimScrub report is a digital product delivered instantly after payment.',
+
   // The page Stripe sends the customer back to after paying or cancelling.
   // The tool page reads the report id from the address and picks up from there.
   SUCCESS_PATH: process.env.SUCCESS_PATH || '/claimscrub-tool.html',

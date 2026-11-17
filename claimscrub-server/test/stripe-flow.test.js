@@ -200,6 +200,8 @@ describe('ClaimScrub payment flow', () => {
     assert.equal(p.client_reference_id, reportId);
     assert.equal(p.metadata.reportId, reportId);
     assert.equal(p.payment_intent_data.metadata.reportId, reportId, 'the PAYMENT itself must carry the report id');
+    assert.match(p.custom_text.submit.message, /All sales are final — no refunds/, 'no-refund notice shown above the Pay button');
+    assert.ok(p.custom_text.submit.message.length <= 1200, 'Stripe allows at most 1,200 characters');
     assert.ok(p.success_url.includes('{CHECKOUT_SESSION_ID}'));
     assert.ok(p.success_url.startsWith('https://site.test/'));
     // privacy: nothing from the bill itself goes to Stripe

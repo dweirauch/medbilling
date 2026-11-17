@@ -156,6 +156,7 @@
   }
   .gate-message.error{background:var(--red-bg);border-color:var(--red);color:var(--ink);}
   .gate-message.info{background:var(--teal-bg, #DCEAE6);border-color:var(--teal);color:var(--ink);}
+  .refund-note{font-size:14px;color:var(--ink);margin:14px auto 0;max-width:440px;}
   .gate-note{
     font-family:var(--mono);font-size:11px;color:var(--amber);margin-top:14px;
     max-width:440px;margin-left:auto;margin-right:auto;
@@ -441,6 +442,7 @@ J3490  Unclassified drug                            2     $340.00"></textarea>
       <div id="gateMessage" class="gate-message" style="display:none;"></div>
       <button class="run" id="unlockBtn">Unlock Full Report — $20</button>
       <button class="run" id="checkAgainBtn" style="display:none;">Check again</button>
+      <div class="refund-note"><b>All sales are final — no refunds.</b> The full report is a digital product delivered instantly after payment.</div>
       <div class="gate-note">$20 flat, never a percentage of anything — you keep 100% of whatever you save. You only pay because likely errors were found; a clean bill is always free. Payment is handled by Stripe on its own secure page.</div>
       <div class="guide-callout">Not sure what happens next? <a href="claimscrub-next-steps.html" target="_blank" rel="noopener">Read the free next-steps guide</a>. No payment needed.</div>
     </div>
@@ -500,6 +502,7 @@ J3490  Unclassified drug                            2     $340.00"></textarea>
 
 <footer>
   <a href="claimscrub-next-steps.html" target="_blank" rel="noopener">Free guide: what to do after a check</a><br><br>
+  All sales are final. ClaimScrub reports are digital products delivered instantly, so we do not offer refunds.<br><br>
   ClaimScrub cross-references a demo CPT/HCPCS/modifier reference set for prototype purposes — not a complete or currently-maintained coding database. Always confirm flagged items with your provider's billing department. Nothing here is legal, financial, or medical advice.
 </footer>
 
