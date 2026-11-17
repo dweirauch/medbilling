@@ -40,7 +40,9 @@ router.post('/', asyncHandler(async (req, res) => {
     }
   }
 
-  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  // The website is served by this same server, so by default send customers back
+  // to whatever address they came from. FRONTEND_URL overrides that if set.
+  const frontendUrl = (process.env.FRONTEND_URL || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
 
   const session = await stripe.checkout.sessions.create({
     mode: 'payment',
@@ -68,7 +70,7 @@ router.post('/', asyncHandler(async (req, res) => {
       description: 'ClaimScrub full report',
     },
     success_url: `${frontendUrl}${SUCCESS_PATH}?reportId=${reportId}&session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${frontendUrl}${CANCEL_PATH}?canceled=true`,
+    cancel_url: `${frontendUrl}${CANCEL_PATH}?canceled=true&reportId=${reportId}`,
   });
 
   await pool.query(`UPDATE reports SET stripe_session_id = $1 WHERE id = $2`, [session.id, reportId]);

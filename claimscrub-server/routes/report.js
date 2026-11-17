@@ -26,7 +26,7 @@ router.get('/:id', asyncHandler(async (req, res) => {
       if (result.reportId === id) {
         if (result.fulfilled) report = await getReport(id);
         else if (result.reason === 'not_paid') {
-          return res.status(402).json({ paid: false, pending: true, error: 'Your payment is still processing.' });
+          return res.status(402).json({ paid: false, pending: true, summary: report.summary, error: 'Your payment is still processing.' });
         }
       }
     } catch (err) {
@@ -35,7 +35,9 @@ router.get('/:id', asyncHandler(async (req, res) => {
   }
 
   if (!report.paid) {
-    return res.status(402).json({ error: 'This report has not been unlocked yet.', paid: false });
+    // The summary (counts and flagged total) is shown before payment anyway, so it's
+    // safe to return; it lets the page rebuild the payment screen after a cancel.
+    return res.status(402).json({ error: 'This report has not been unlocked yet.', paid: false, summary: report.summary });
   }
 
   res.json({ paid: true, results: report.items, summary: report.summary });

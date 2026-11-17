@@ -1,8 +1,14 @@
 # ClaimScrub Server
 
-Backend for ClaimScrub. It re-runs the audit on the server (so the paywall can't
-be bypassed by editing browser JavaScript), starts Stripe Checkout, confirms
-payment, and releases the full report only after payment.
+Backend for ClaimScrub. It serves the website, runs the audit on the server (so
+the paywall can't be bypassed from the browser, and the billing-code list never
+leaves the server), starts Stripe Checkout, confirms payment, and releases the
+full report only after payment.
+
+The website pages live in the repository's `website/` folder, next to this one.
+This server serves them: the home page at `/`, the tool at
+`/claimscrub-tool.html`, and the free guide at `/claimscrub-next-steps.html`.
+Set `WEBSITE_DIR` only if the pages live somewhere else.
 
 ## How a payment works
 
@@ -15,7 +21,10 @@ payment, and releases the full report only after payment.
 3. `POST /api/create-checkout-session` with the `reportId` returns a Stripe
    Checkout URL ($20, one time). Asking again for the same report returns the
    same open checkout page, so nobody can be charged twice.
-4. The customer pays on Stripe's hosted page and comes back to the website.
+4. The customer pays on Stripe's hosted page and comes back to the tool page
+   (`/claimscrub-tool.html?reportId=...&session_id=...`), which picks up the
+   report automatically. Cancelling returns them to the payment screen with
+   "nothing was charged," and paying later reuses the same checkout.
 5. The report is unlocked in **two** ways, whichever happens first:
    - Stripe's webhook (`/api/stripe-webhook`), and
    - the return page calling `GET /api/report/:id?session_id=...`, which asks
@@ -36,8 +45,10 @@ generic product name.
 | `GET /api/report/:id` | Full report once paid. Optional `?session_id=` from the return URL. |
 | `GET /api/health` | Health check. |
 
-Status codes the website should handle: `402` locked (`pending: true` means a
-slower payment is still processing), `409` already paid / payment processing.
+Status codes the website handles: `402` locked (includes the summary;
+`pending: true` means a slower payment is still processing), `409` already paid /
+payment processing. `/api/audit` keeps only the fields it needs from each line
+and accepts at most 500 lines.
 
 ## Stripe Dashboard setup (do this in your SANDBOX first)
 
@@ -115,6 +126,10 @@ cp .env.example .env      # then fill in real values
 npm run dev
 ```
 
+Then open http://localhost:3000 in a browser. Opening the HTML files directly
+(double-clicking them) no longer works for checking a bill, because the check
+runs on this server.
+
 Forward Stripe webhooks to your machine with the [Stripe CLI](https://stripe.com/docs/stripe-cli):
 
 ```
@@ -143,13 +158,18 @@ server picking up a new list. `embedded-postgres` is deliberately not in
 
 ## Deploying to Render (free tier)
 
-1. Push this folder to GitHub.
+1. The code is already on GitHub (`dweirauch/medbilling`).
 2. Render: New > PostgreSQL (free). Copy its **Internal Database URL**.
-3. Render: New > Web Service, connect the repo. Build `npm install`, start `npm start`.
+3. Render: New > Web Service, connect the repo. Set **Root Directory** to
+   `claimscrub-server`, build `npm install`, start `npm start`. (The `website`
+   folder next to it is still included; Render checks out the whole repository.)
 4. Environment variables: `DATABASE_URL`, `STRIPE_SECRET_KEY` (test key first),
-   `STRIPE_WEBHOOK_SECRET`, `FRONTEND_URL`.
-5. Check `https://YOUR-SERVER.onrender.com/api/health` shows `{"ok":true}`.
-6. Add the webhook endpoint in Stripe (see above).
+   `STRIPE_WEBHOOK_SECRET`. `FRONTEND_URL` is optional: by default customers are
+   sent back to whatever address they used.
+5. Open `https://YOUR-SERVER.onrender.com/` (the home page) and
+   `/api/health` (should show `{"ok":true}`).
+6. Add the webhook endpoint in Stripe (see above), then do a full test purchase
+   with Stripe's test card 4242 4242 4242 4242.
 
 Before taking real payments: move to a paid web service (no cold starts delaying
 webhooks) and a paid database (the free one expires after 30 days). Then swap in
@@ -157,10 +177,6 @@ live Stripe keys and create the webhook endpoint again in live mode.
 
 ## Not done yet
 
-- **Website wiring.** The tool page still reveals reports locally. It needs to
-  call `/api/audit`, redirect to the checkout URL, and, on return, call
-  `/api/report/:id?session_id=...`. `SUCCESS_PATH` / `CANCEL_PATH` (in `config.js`
-  or the environment) are placeholders until those pages exist.
 - **Sales tax.** Not enabled. Add Stripe Tax only if your accountant says the
   report is taxable.
 - **Licensed CPT data.** The importer is ready (see below). Until a file is

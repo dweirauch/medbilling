@@ -150,6 +150,12 @@
   .gate-copy{
     max-width:460px;margin:0 auto 20px;color:var(--ink-soft);font-size:14.5px;
   }
+  .gate-message{
+    border-radius:10px;padding:12px 14px;margin:0 auto 16px;max-width:520px;font-size:14.5px;text-align:left;
+    background:#FAFAF8;border:1px solid var(--paper-line);color:var(--ink-soft);
+  }
+  .gate-message.error{background:var(--red-bg);border-color:var(--red);color:var(--ink);}
+  .gate-message.info{background:var(--teal-bg, #DCEAE6);border-color:var(--teal);color:var(--ink);}
   .gate-note{
     font-family:var(--mono);font-size:11px;color:var(--amber);margin-top:14px;
     max-width:440px;margin-left:auto;margin-right:auto;
@@ -432,8 +438,10 @@ J3490  Unclassified drug                            2     $340.00"></textarea>
       </div>
       <div class="gate-estimate" id="gateEstimate"></div>
       <p class="gate-copy">The full report shows exactly which lines were flagged and why — the specific codes, the charges, and the reasoning behind each one.</p>
+      <div id="gateMessage" class="gate-message" style="display:none;"></div>
       <button class="run" id="unlockBtn">Unlock Full Report — $20</button>
-      <div class="gate-note">$20 flat, never a percentage of anything — you keep 100% of whatever you save. In the live version, this is where payment actually happens, and only if likely errors were found; a clean bill is always free. Since payment isn't wired in yet, clicking this just reveals the report so you can keep testing.</div>
+      <button class="run" id="checkAgainBtn" style="display:none;">Check again</button>
+      <div class="gate-note">$20 flat, never a percentage of anything — you keep 100% of whatever you save. You only pay because likely errors were found; a clean bill is always free. Payment is handled by Stripe on its own secure page.</div>
       <div class="guide-callout">Not sure what happens next? <a href="claimscrub-next-steps.html" target="_blank" rel="noopener">Read the free next-steps guide</a>. No payment needed.</div>
     </div>
   </section>
@@ -467,7 +475,7 @@ J3490  Unclassified drug                            2     $340.00"></textarea>
       <button type="button" class="upload-btn" id="downloadDocBtn">Download as Word Document (color-coded)</button>
       <button type="button" class="upload-btn" id="downloadTextBtn">Download as Plain Text</button>
     </div>
-    <div class="download-note">Save these so you don't have to re-upload or re-pay if you come back later — nothing is stored on our end once you leave this page. The Word document opens in Microsoft Word or, free, in Google Docs (upload it to Drive, or open it on your phone with the Docs app).</div>
+    <div class="download-note">Save a copy for your records. A paid report can be reopened from this page's address for a limited time, but a saved file is the safest way to keep it. The Word document opens in Microsoft Word or, free, in Google Docs (upload it to Drive, or open it on your phone with the Docs app).</div>
     <div class="guide-callout">Not sure what to do with these files? <a href="claimscrub-next-steps.html" target="_blank" rel="noopener">Read the free guide</a>.</div>
   </section>
 
@@ -500,122 +508,32 @@ J3490  Unclassified drug                            2     $340.00"></textarea>
 <script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script>
-// ---------- reference data (illustrative demo subset, not exhaustive) ----------
-const CPT_REF = {
-  // Office / outpatient E&M
-  "99202":"Office/outpatient visit, new patient, straightforward",
-  "99203":"Office/outpatient visit, new patient, low complexity",
-  "99204":"Office/outpatient visit, new patient, moderate complexity",
-  "99205":"Office/outpatient visit, new patient, high complexity",
-  "99211":"Office/outpatient visit, established patient, minimal",
-  "99212":"Office/outpatient visit, established patient, straightforward",
-  "99213":"Office/outpatient visit, established patient, low complexity",
-  "99214":"Office/outpatient visit, established patient, moderate complexity",
-  "99215":"Office/outpatient visit, established patient, high complexity",
-  // Emergency department
-  "99281":"Emergency department visit, level 1 (minor)",
-  "99282":"Emergency department visit, level 2 (low-to-moderate)",
-  "99283":"Emergency department visit, level 3 (moderate)",
-  "99284":"Emergency department visit, level 4 (moderate-to-high severity)",
-  "99285":"Emergency department visit, level 5 (high severity)",
-  // Hospital / inpatient
-  "99221":"Initial hospital care, low complexity",
-  "99222":"Initial hospital care, moderate complexity",
-  "99223":"Initial hospital care, high complexity",
-  "99231":"Subsequent hospital care, low complexity",
-  "99232":"Subsequent hospital care, moderate complexity",
-  "99233":"Subsequent hospital care, high complexity",
-  "99238":"Hospital discharge management, 30 min or less",
-  "99239":"Hospital discharge management, more than 30 min",
-  // Labs
-  "80053":"Comprehensive metabolic panel",
-  "80048":"Basic metabolic panel",
-  "80061":"Lipid panel",
-  "85025":"Complete blood count (CBC) with differential",
-  "85027":"Complete blood count (CBC), automated",
-  "81001":"Urinalysis, automated, with microscopy",
-  "81003":"Urinalysis, automated, without microscopy",
-  "81025":"Urine pregnancy test, visual color comparison",
-  "82803":"Blood gases, arterial",
-  "82947":"Glucose, blood test",
-  "83036":"Hemoglobin A1c",
-  "84443":"Thyroid stimulating hormone (TSH)",
-  "36415":"Collection of venous blood by venipuncture",
-  "87070":"Bacterial culture, general",
-  "87804":"Rapid influenza assay",
-  "87880":"Rapid strep test",
-  "36591":"Collection of blood from an implanted venous access device",
-  // Imaging
-  "70450":"CT scan of head/brain, without contrast",
-  "70460":"CT scan of head/brain, with contrast",
-  "71045":"Chest X-ray, 1 view",
-  "71046":"Chest X-ray, 2 views",
-  "72100":"X-ray of lower spine, 2-3 views",
-  "73030":"X-ray of shoulder, complete",
-  "73721":"MRI, lower extremity joint",
-  "74176":"CT scan of abdomen and pelvis, without contrast",
-  "76700":"Abdominal ultrasound, complete",
-  "76705":"Abdominal ultrasound, limited",
-  "93000":"Electrocardiogram, complete",
-  "93005":"Electrocardiogram, tracing only",
-  // Injections / infusions
-  "96360":"IV infusion, hydration, initial 31-60 min",
-  "96361":"IV infusion, hydration, each additional hour",
-  "96365":"IV infusion, therapeutic, initial",
-  "96366":"IV infusion, therapeutic, each additional hour",
-  "96372":"Therapeutic injection, subcutaneous or intramuscular",
-  "96374":"Therapeutic IV push, initial substance/drug",
-  "96375":"Therapeutic IV push, each additional sequential substance/drug",
-  // Minor procedures
-  "12001":"Simple repair of superficial wound, 2.5cm or less",
-  "12002":"Simple repair of superficial wound, 2.6-7.5cm",
-  "29125":"Application of short arm splint",
-  "29426":"Application of below-knee splint",
-  "29826":"Arthroscopic shoulder decompression",
-  "29827":"Arthroscopic rotator cuff repair",
-  "90471":"Immunization administration, one vaccine",
-  "90472":"Immunization administration, each additional vaccine",
-  // Common HCPCS drug/supply codes
-  "J2405":"Ondansetron HCl injection, per 1mg",
-  "J2550":"Promethazine HCl injection, up to 50mg",
-  "J1200":"Diphenhydramine HCl injection, up to 50mg",
-  "J0696":"Ceftriaxone sodium injection, per 250mg",
-  "J1885":"Ketorolac tromethamine injection, per 15mg",
-  "S0028":"Famotidine injection",
-  "J3490":"Unclassified drug",
-  "A0429":"Ambulance service, basic life support, emergency"
-};
+// ---------- talking to the ClaimScrub server ----------
+// The audit itself runs on the server, so the paywall can't be bypassed from the
+// browser and the billing-code list never leaves the server. This page only reads
+// the bill (photo or pasted text) and shows what the server sends back.
+const API_BASE = '';
+const OPENED_AS_FILE = location.protocol === 'file:';
 
-// Known pairs that should generally be billed as one comprehensive code, not both.
-// This is an illustrative subset of publicly-published CMS NCCI edit pairs, not the complete table.
-const UNBUNDLE_PAIRS = [
-  ["29826","29827"],   // shoulder arthroscopy decompression + rotator cuff repair
-  ["36415","80053"],   // venipuncture + comprehensive metabolic panel
-  ["36415","85025"],   // venipuncture + CBC
-  ["36415","80048"],   // venipuncture + basic metabolic panel
-  ["12001","99213"],   // simple wound repair + office visit (same encounter, no modifier)
-  ["12001","99214"],
-  ["96372","99213"],   // injection administration + office visit (same encounter, no modifier)
-  ["96372","99214"],
-  ["96374","96372"],   // IV push + IM/subq injection billed as if both primary
-  ["71045","71046"],   // chest x-ray 1 view + chest x-ray 2 views, same encounter
-  ["80048","80053"],   // basic metabolic panel + comprehensive metabolic panel (overlapping panels)
-  ["81001","81003"],   // urinalysis with microscopy + without microscopy, same encounter
-  ["93000","93005"],   // complete EKG + tracing-only EKG, same encounter
-  ["76700","76705"],   // complete abdominal ultrasound + limited abdominal ultrasound, same encounter
-  ["29125","99283"],   // splint application + ED visit, same encounter, no modifier
-  ["29125","99284"]
-];
+async function api(method, url, body){
+  let res;
+  try{
+    res = await fetch(API_BASE + url, {
+      method,
+      headers: body ? { 'Content-Type': 'application/json' } : {},
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  }catch(e){
+    throw new Error('Could not reach ClaimScrub. Check your internet connection and try again.');
+  }
+  let data = null;
+  try{ data = await res.json(); }catch(e){}
+  return { status: res.status, data: data || {} };
+}
 
-const VALID_MODIFIERS = {
-  "25":"Significant, separately identifiable E/M service",
-  "59":"Distinct procedural service",
-  "76":"Repeat procedure, same physician",
-  "91":"Repeat clinical diagnostic lab test",
-  "LT":"Left side",
-  "RT":"Right side",
-  "50":"Bilateral procedure"
-};
+// Description for a line: the official one from the server if the code is known,
+// otherwise whatever the bill itself said.
+function describe(it){ return it.description || it.desc || '—'; }
 
 // ---------- device-aware tweaks ----------
 (function(){
@@ -708,68 +626,172 @@ runBtn.addEventListener('click', async ()=>{
     document.getElementById('rawTextView').value = text;
     document.getElementById('rawTextDebug').style.display = 'block';
     const items = parseLines(text);
-    statusEl.textContent = 'Checking against reference set...';
-    const flagged = auditItems(items);
-    showGate(flagged, text);
-    statusEl.textContent = 'Done — ' + items.length + ' line item(s) found.';
+    if(items.length === 0){
+      statusEl.textContent = 'No billing codes with charges were found. If you used a photo, try a clearer, straight-on picture, or paste the text instead.';
+      runBtn.disabled = false;
+      return;
+    }
+    const patientNote = buildPatientNote(text);
+    statusEl.textContent = 'Checking ' + items.length + ' line item(s)...';
+    const { status, data } = await api('POST', '/api/audit', {
+      items: items.map(it => ({ code: it.code, modifier: it.modifier, desc: it.desc, qty: it.qty, charge: it.charge })),
+    });
+    if(status !== 200){
+      throw new Error(data.error || 'The check could not be completed. Please try again in a moment.');
+    }
+    if(data.free){
+      showClean(data.results, data.summary, patientNote);
+    } else {
+      rememberNote(data.reportId, patientNote);
+      showGate(data.reportId, data.summary);
+    }
+    statusEl.textContent = 'Done — ' + items.length + ' line item(s) checked.';
   }catch(err){
     console.error(err);
-    statusEl.textContent = 'Something went wrong reading that input: ' + err.message;
+    statusEl.textContent = err.message || 'Something went wrong. Please try again.';
   }
   runBtn.disabled = false;
 });
 
-// ---------- pre-report gate ----------
-let pendingResults = null;
-let pendingRawText = '';
+// ---------- results, payment screen, and the return from Stripe ----------
+let currentReportId = null;
 
-function showGate(results, rawText){
-  document.getElementById('results').style.display = 'none';
-  document.getElementById('reportGate').style.display = 'none';
-  document.getElementById('reportClean').style.display = 'none';
+function hideAllPanels(){
+  ['results', 'reportGate', 'reportClean', 'nextSteps'].forEach(id => { document.getElementById(id).style.display = 'none'; });
+}
 
-  const redCount = results.filter(it => it.flags.some(f=>f.level==='red')).length;
-  const yellowCount = results.filter(it => !it.flags.some(f=>f.level==='red') && it.flags.length).length;
-  const clearCount = results.length - redCount - yellowCount;
+function setGateMessage(text, kind){
+  const el = document.getElementById('gateMessage');
+  if(!text){ el.style.display = 'none'; el.textContent = ''; return; }
+  el.textContent = text;
+  el.className = 'gate-message ' + (kind || '');
+  el.style.display = 'block';
+}
 
-  if(redCount === 0){
-    // Nothing likely wrong — free, show immediately, no paywall.
-    document.getElementById('cleanHeadline').textContent =
-      yellowCount > 0
-        ? 'No likely errors found — a couple of minor items worth a glance.'
-        : 'No likely errors found.';
-    document.getElementById('reportClean').style.display = 'block';
-    renderResults(results, rawText);
-    document.getElementById('reportClean').scrollIntoView({behavior:'smooth', block:'start'});
-    return;
-  }
+// No likely errors: free, shown right away, nothing stored on the server.
+function showClean(results, summary, patientNote){
+  hideAllPanels();
+  document.getElementById('cleanHeadline').textContent =
+    summary.yellowCount > 0
+      ? 'No likely errors found — a couple of minor items worth a glance.'
+      : 'No likely errors found.';
+  document.getElementById('reportClean').style.display = 'block';
+  renderResults(results, patientNote);
+  document.getElementById('reportClean').scrollIntoView({behavior:'smooth', block:'start'});
+}
 
-  // Likely errors found — show the summary/paywall, hold back the detailed table.
-  pendingResults = results;
-  pendingRawText = rawText;
-
-  const redCharges = results
-    .filter(it => it.flags.some(f=>f.level==='red'))
-    .reduce((sum, it) => sum + (it.charge||0), 0);
-
+// Likely errors: show the counts and total only. The details stay on the server.
+function showGate(reportId, summary, message, messageKind){
+  hideAllPanels();
+  currentReportId = reportId;
+  const s = summary || {};
+  const redCount = s.redCount || 0;
   document.getElementById('gateHeadline').textContent =
     'We found ' + redCount + ' likely error' + (redCount===1?'':'s') + '.';
   document.getElementById('gateCntRed').textContent = redCount;
-  document.getElementById('gateCntYellow').textContent = yellowCount;
-  document.getElementById('gateCntClear').textContent = clearCount;
+  document.getElementById('gateCntYellow').textContent = s.yellowCount || 0;
+  document.getElementById('gateCntClear').textContent = s.clearCount || 0;
   document.getElementById('gateEstimate').textContent =
-    'Flagged charges total roughly $' + formatCurrency(redCharges) + '.';
-
+    'Flagged charges total roughly $' + formatCurrency(s.redCharges || 0) + '.';
+  const btn = document.getElementById('unlockBtn');
+  btn.style.display = '';
+  btn.disabled = false;
+  btn.textContent = 'Unlock Full Report — $20';
+  document.getElementById('checkAgainBtn').style.display = 'none';
+  setGateMessage(message, messageKind);
   document.getElementById('reportGate').style.display = 'block';
   document.getElementById('reportGate').scrollIntoView({behavior:'smooth', block:'start'});
 }
 
-document.getElementById('unlockBtn').addEventListener('click', ()=>{
-  if(!pendingResults) return;
-  document.getElementById('reportGate').style.display = 'none';
-  renderResults(pendingResults, pendingRawText);
-  document.getElementById('results').scrollIntoView({behavior:'smooth', block:'start'});
+// Paid, but a slower payment method hasn't cleared yet.
+function showPending(reportId, summary){
+  showGate(reportId, summary,
+    'Your payment is still processing. Some payment methods take a little while to clear. Your report will unlock as soon as it does. You can check again below, or come back to this page later.', 'info');
+  document.getElementById('unlockBtn').style.display = 'none';
+  document.getElementById('checkAgainBtn').style.display = '';
+}
+
+document.getElementById('unlockBtn').addEventListener('click', async ()=>{
+  if(!currentReportId) return;
+  const btn = document.getElementById('unlockBtn');
+  btn.disabled = true;
+  btn.textContent = 'Opening secure checkout...';
+  setGateMessage('');
+  try{
+    const { status, data } = await api('POST', '/api/create-checkout-session', { reportId: currentReportId });
+    if(status === 200 && data.url){
+      window.location.href = data.url;   // Stripe's own secure payment page
+      return;
+    }
+    if(status === 409 && (data.alreadyPaid || data.pending)){ await loadReport(currentReportId, null); return; }
+    throw new Error(data.error || 'Checkout could not be started.');
+  }catch(err){
+    const offline = /Could not reach/.test(err.message || '');
+    setGateMessage(offline
+      ? err.message + ' Nothing was charged.'
+      : 'Checkout could not be started. Nothing was charged. Please try again in a moment.', 'error');
+    btn.disabled = false;
+    btn.textContent = 'Unlock Full Report — $20';
+  }
 });
+
+document.getElementById('checkAgainBtn').addEventListener('click', ()=>{
+  if(currentReportId) loadReport(currentReportId, new URLSearchParams(location.search).get('session_id'));
+});
+
+// Fetch a report from the server and show whatever state it's in.
+async function loadReport(reportId, sessionId){
+  statusEl.textContent = sessionId ? 'Confirming your payment...' : 'Loading your report...';
+  let res;
+  try{
+    res = await api('GET', '/api/report/' + encodeURIComponent(reportId) + (sessionId ? '?session_id=' + encodeURIComponent(sessionId) : ''));
+  }catch(err){
+    statusEl.textContent = err.message;
+    return;
+  }
+  const { status, data } = res;
+  if(status === 200 && data.paid){
+    statusEl.textContent = 'Payment confirmed. Here is your full report.';
+    currentReportId = reportId;
+    hideAllPanels();
+    renderResults(data.results, recallNote(reportId));
+    return;
+  }
+  if(status === 402 && data.pending){ statusEl.textContent = ''; showPending(reportId, data.summary); return; }
+  if(status === 402){ statusEl.textContent = ''; showGate(reportId, data.summary); return; }
+  statusEl.textContent = status === 404
+    ? 'That report could not be found. Reports are only kept for a limited time; you may need to check the bill again.'
+    : (data.error || 'The report could not be loaded. Please try again.');
+}
+
+// Coming back from Stripe (paid or cancelled) lands on this page with the report id in the address.
+(function handleReturnFromCheckout(){
+  const q = new URLSearchParams(location.search);
+  const reportId = q.get('reportId');
+  if(!reportId) return;
+  if(q.get('canceled') === 'true'){
+    currentReportId = reportId;
+    api('GET', '/api/report/' + encodeURIComponent(reportId)).then(({ status, data }) => {
+      if(status === 200 && data.paid){ hideAllPanels(); renderResults(data.results, recallNote(reportId)); return; }
+      if(status === 402) showGate(reportId, data.summary, 'Payment was cancelled. Nothing was charged. You can try again whenever you like.', 'info');
+    }).catch(err => { statusEl.textContent = err.message; });
+    return;
+  }
+  loadReport(reportId, q.get('session_id'));
+})();
+
+// The name/date-of-birth check is done in the browser (the server never sees them).
+// Its result is kept in this browser tab only, so it's still there after paying.
+function rememberNote(reportId, noteHtml){
+  try{ sessionStorage.setItem('claimscrub-note-' + reportId, noteHtml || ''); }catch(e){}
+}
+function recallNote(reportId){
+  try{ return sessionStorage.getItem('claimscrub-note-' + reportId) || ''; }catch(e){ return ''; }
+}
+
+if(OPENED_AS_FILE){
+  statusEl.textContent = 'This page has been opened as a file on your device. To check a bill, open it from the ClaimScrub website address instead.';
+}
 
 // ---------- parsing ----------
 function parseLines(text){
@@ -820,75 +842,26 @@ function parseLines(text){
   return items;
 }
 
-// ---------- rules engine ----------
-function auditItems(items){
-  const results = items.map(it=>({...it, flags:[]}));
+// ---------- patient info check (runs in the browser only) ----------
+// Tolerant of OCR quirks, middle names/initials, and date format differences.
+function buildPatientNote(rawText){
+  const name = document.getElementById('patName').value.trim();
+  const dob = document.getElementById('patDob').value.trim();
+  let note = '';
 
-  // 1. Duplicate detection (same code + same charge appearing more than once)
-  const seen = {};
-  results.forEach(it=>{
-    const key = it.code + '|' + it.charge;
-    seen[key] = (seen[key]||0) + 1;
-  });
-  results.forEach(it=>{
-    const key = it.code + '|' + it.charge;
-    if(seen[key] > 1){
-      it.flags.push({level:'red', reason:'This exact code and charge appears ' + seen[key] + ' times. Likely a duplicate billing.'});
+  if(name){
+    const nameFound = fuzzyNameMatch(name, rawText);
+    if(!nameFound){
+      note += '<div class="scope-box" style="margin-bottom:14px;border-color:var(--amber);">Name "'+escapeHtml(name)+'" was not clearly found in the scanned text (checked for close/partial matches too) — worth confirming the bill has your correct name on it.</div>';
     }
-  });
-
-  // 2. Unbundling — known pairs both present
-  const codesPresent = new Set(results.map(r=>r.code));
-  UNBUNDLE_PAIRS.forEach(([a,b])=>{
-    if(codesPresent.has(a) && codesPresent.has(b)){
-      results.forEach(it=>{
-        if(it.code===a || it.code===b){
-          it.flags.push({level:'red', reason:'Billed alongside ' + (it.code===a?b:a) + ', a pairing that is typically bundled into one comprehensive code.'});
-        }
-      });
+  }
+  if(dob){
+    const dobFound = fuzzyDateMatch(dob, rawText);
+    if(!dobFound){
+      note += '<div class="scope-box" style="margin-bottom:14px;border-color:var(--amber);">Date of birth "'+escapeHtml(dob)+'" was not found in the scanned text in any recognized date format — worth confirming.</div>';
     }
-  });
-
-  // 3. Unknown / invalid code
-  results.forEach(it=>{
-    if(!CPT_REF[it.code]){
-      it.flags.push({level:'yellow', reason:'Code not found in the standard reference set — could be valid but uncommon, or mistyped/invalid. Worth confirming.'});
-    }
-  });
-
-  // 4. Modifier check
-  results.forEach(it=>{
-    if(it.modifier && !VALID_MODIFIERS[it.modifier]){
-      it.flags.push({level:'yellow', reason:'Modifier "' + it.modifier + '" is not a recognized standard modifier for this context.'});
-    }
-  });
-
-  // 5. Math check — unusually high quantity for services normally billed once (or with capped repeats)
-  results.forEach(it=>{
-    if(it.charge!=null && it.qty>1){
-      const desc = CPT_REF[it.code] || '';
-      const onceTypical = /visit|panel|x-ray|ultrasound|electrocardiogram|urinalysis|pregnancy test/i.test(desc);
-      const repeatableButCapped = /injection|infusion|iv push/i.test(desc);
-      if(onceTypical && it.qty >= 2){
-        it.flags.push({level:'yellow', reason:'Quantity of ' + it.qty + ' is unusual for a service typically billed once per encounter.'});
-      } else if(repeatableButCapped && it.qty >= 8){
-        it.flags.push({level:'yellow', reason:'Quantity of ' + it.qty + ' is unusually high for this type of injection/infusion in a single visit — worth confirming against the medical record.'});
-      }
-    }
-  });
-
-  // 6. Upcoding heuristic (weak signal) — high-complexity E/M code with no supporting
-  // procedure, lab, or imaging codes on the same bill. This is NOT a confirmed finding —
-  // full confirmation requires the clinical record — so it's always yellow, never red.
-  const HIGH_COMPLEXITY_EM = new Set(["99215","99205","99223","99284","99285","99233"]);
-  const hasSupportingCodes = results.some(r => !HIGH_COMPLEXITY_EM.has(r.code) && CPT_REF[r.code]);
-  results.forEach(it=>{
-    if(HIGH_COMPLEXITY_EM.has(it.code) && !hasSupportingCodes){
-      it.flags.push({level:'yellow', reason:'This is a high-complexity visit code billed with no other procedure, lab, or imaging codes on the bill to support that level of complexity. This is a weak signal, not a confirmed error — high-complexity visits can be legitimate without additional billed services — but it may be worth asking the provider what justified this level.'});
-    }
-  });
-
-  return results;
+  }
+  return note;
 }
 
 // ---------- patient info matching helpers ----------
@@ -962,7 +935,7 @@ function escapeHtml(str){
     .replace(/'/g,'&#39;');
 }
 
-function renderResults(results, rawText){
+function renderResults(results, patientNoteHtml){
   const body = document.getElementById('resultsBody');
   body.innerHTML = '';
   let red=0, yellow=0, clear=0;
@@ -976,7 +949,7 @@ function renderResults(results, rawText){
     const pill = topLevel==='red' ? '<span class="pill red">Likely error</span>'
                : topLevel==='yellow' ? '<span class="pill yellow">Check this</span>'
                : '<span class="pill clear">No issue</span>';
-    const desc = escapeHtml(CPT_REF[it.code] ? CPT_REF[it.code] : (it.desc || '—'));
+    const desc = escapeHtml(describe(it));
     const why = it.flags.map(f=>'<div class="why">• '+escapeHtml(f.reason)+'</div>').join('') || '<div class="why">Matches standard reference, no duplicates or pairing conflicts found.</div>';
     tr.innerHTML = `
       <td>${pill}</td>
@@ -993,27 +966,9 @@ function renderResults(results, rawText){
   document.getElementById('cntYellow').textContent = yellow;
   document.getElementById('cntClear').textContent = clear;
 
-  // patient info check — tolerant of OCR quirks, middle names/initials, and date format differences
-  const name = document.getElementById('patName').value.trim();
-  const dob = document.getElementById('patDob').value.trim();
-  let note = '';
-
-  if(name){
-    const nameFound = fuzzyNameMatch(name, rawText);
-    if(!nameFound){
-      note += '<div class="scope-box" style="margin-bottom:14px;border-color:var(--amber);">Name "'+escapeHtml(name)+'" was not clearly found in the scanned text (checked for close/partial matches too) — worth confirming the bill has your correct name on it.</div>';
-    }
-  }
-  if(dob){
-    const dobFound = fuzzyDateMatch(dob, rawText);
-    if(!dobFound){
-      note += '<div class="scope-box" style="margin-bottom:14px;border-color:var(--amber);">Date of birth "'+escapeHtml(dob)+'" was not found in the scanned text in any recognized date format — worth confirming.</div>';
-    }
-  }
-  document.getElementById('patientNote').innerHTML = note;
+  document.getElementById('patientNote').innerHTML = patientNoteHtml || '';
 
   lastResults = results;
-  lastRawText = rawText;
   renderNextSteps(results);
 
   document.getElementById('results').style.display = 'block';
@@ -1021,7 +976,6 @@ function renderResults(results, rawText){
 }
 
 let lastResults = null;
-let lastRawText = '';
 
 // ---------- downloads ----------
 // Short next-steps note that travels with every download, so the file still makes sense
@@ -1113,7 +1067,7 @@ document.getElementById('downloadDocBtn').addEventListener('click', async ()=>{
       const level = it.flags.some(f=>f.level==='red') ? 'red' : (it.flags.length ? 'yellow' : 'clear');
       const fill = level==='red' ? 'F3D9D4' : level==='yellow' ? 'F7E6C4' : 'FFFFFF';
       const label = level==='red' ? 'LIKELY ERROR' : level==='yellow' ? 'CHECK THIS' : 'NO ISSUE';
-      const desc = CPT_REF[it.code] ? CPT_REF[it.code] : (it.desc || '\u2014');
+      const desc = describe(it);
       const findings = it.flags.length
         ? it.flags.map(f => para('\u2022 ' + f.reason, { size: 19 }))
         : [para('Matches standard reference, no duplicates or pairing conflicts found.', { size: 19 })];
@@ -1214,7 +1168,7 @@ document.getElementById('downloadTextBtn').addEventListener('click', ()=>{
 
   lastResults.forEach(it=>{
     const topLevel = it.flags.some(f=>f.level==='red') ? 'LIKELY ERROR' : (it.flags.length ? 'CHECK THIS' : 'NO ISSUE');
-    const desc = CPT_REF[it.code] ? CPT_REF[it.code] : (it.desc || '—');
+    const desc = describe(it);
     lines.push('[' + topLevel + '] ' + it.code + (it.modifier?('-'+it.modifier):'') + ' — ' + desc);
     lines.push('  Qty: ' + it.qty + '   Charge: ' + (it.charge!=null?('$'+formatCurrency(it.charge)):'—'));
     if(it.flags.length){
@@ -1239,8 +1193,12 @@ document.getElementById('downloadTextBtn').addEventListener('click', ()=>{
   const link = document.createElement('a');
   link.download = 'claimscrub-report-' + new Date().toISOString().slice(0,10) + '.txt';
   link.href = URL.createObjectURL(blob);
+  document.body.appendChild(link);
   link.click();
-  URL.revokeObjectURL(link.href);
+  link.remove();
+  // Free the file a few seconds later, not instantly: some phone browsers are
+  // still reading it when the tap returns, and the download silently fails.
+  setTimeout(() => URL.revokeObjectURL(link.href), 4000);
 });
 
 // ---------- next steps (informational only — no letters, no auto-filing) ----------
