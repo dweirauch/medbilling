@@ -181,7 +181,7 @@
   .nextsteps-list b{color:var(--ink);}
   .mono-inline{font-family:var(--mono);font-size:13px;}
 
-  .download-row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:24px;}
+  .download-row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:8px;}
   .download-note{font-family:var(--mono);font-size:11px;color:var(--ink-soft);text-align:center;margin-top:10px;}
 
   .upload-btn-row{
@@ -200,6 +200,11 @@
     transition:background .15s, border-color .15s;
   }
   .upload-btn:hover{background:var(--card-hover, #F7F6F3);border-color:var(--teal);}
+  .download-all-btn{display:block;margin:24px auto 0;font-family:var(--sans);font-weight:600;font-size:15px;background:var(--teal);color:#fff;border:none;border-radius:10px;padding:14px 26px;cursor:pointer;}
+  .download-all-btn:hover{filter:brightness(1.08);}
+  .download-all-btn:disabled, .upload-btn:disabled{opacity:.6;cursor:wait;}
+  .download-all-sub{text-align:center;font-size:12px;color:var(--ink-soft);margin-top:8px;}
+  .download-or{text-align:center;font-size:12px;color:var(--ink-soft);margin-top:18px;}
 
   textarea{
     width:100%;
@@ -324,6 +329,7 @@
 
     .download-row{flex-direction:column;}
     .download-row .upload-btn{width:100%;}
+    .download-all-btn{width:100%;min-height:52px;}
 
     /* results table -> one card per line item */
     table{border:none;border-radius:0;overflow:visible;}
@@ -472,12 +478,15 @@ J3490  Unclassified drug                            2     $340.00"></textarea>
       </table>
     </div>
 
+    <button type="button" class="download-all-btn" id="downloadAllBtn">Download all 3 files (one .zip)</button>
+    <div class="download-all-sub">Image, color-coded Word document and plain text, together in one file.</div>
+    <div class="download-or">Or download just one:</div>
     <div class="download-row">
       <button type="button" class="upload-btn" id="downloadImageBtn">Download as Image</button>
       <button type="button" class="upload-btn" id="downloadDocBtn">Download as Word Document (color-coded)</button>
       <button type="button" class="upload-btn" id="downloadTextBtn">Download as Plain Text</button>
     </div>
-    <div class="download-note">Save a copy for your records. A paid report can be reopened from this page's address for a limited time, but a saved file is the safest way to keep it. The Word document opens in Microsoft Word or, free, in Google Docs (upload it to Drive, or open it on your phone with the Docs app).</div>
+    <div class="download-note">To open the .zip: on a phone, tap it in your Files or Downloads app and choose Extract; on a computer, double-click it. Save a copy for your records. A paid report can be reopened from this page's address for a limited time, but a saved file is the safest way to keep it. The Word document opens in Microsoft Word or, free, in Google Docs (upload it to Drive, or open it on your phone with the Docs app).</div>
     <div class="guide-callout">Not sure what to do with these files? <a href="claimscrub-next-steps.html" target="_blank" rel="noopener">Read the free guide</a>.</div>
   </section>
 
@@ -992,12 +1001,29 @@ const REPORT_NEXT_STEPS = [
 ];
 const REPORT_GUIDE_LINE = 'A free step-by-step guide is available on the ClaimScrub website.';
 
-document.getElementById('downloadImageBtn').addEventListener('click', async ()=>{
-  const btn = document.getElementById('downloadImageBtn');
+function reportFileName(ext){
+  return 'claimscrub-report-' + new Date().toISOString().slice(0,10) + '.' + ext;
+}
+function saveBlob(blob, filename){
+  const link = document.createElement('a');
+  link.download = filename;
+  link.href = URL.createObjectURL(blob);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  // Free the file a few seconds later, not instantly: some phone browsers are
+  // still reading it when the tap returns, and the download silently fails.
+  setTimeout(() => URL.revokeObjectURL(link.href), 4000);
+}
+async function withBusy(btn, label, fn){
+  const original = btn.textContent;
   btn.disabled = true;
-  const originalText = btn.textContent;
-  btn.textContent = 'Preparing image...';
-  try{
+  btn.textContent = label;
+  try{ await fn(); }
+  finally{ btn.disabled = false; btn.textContent = original; }
+}
+
+async function buildImageBlob(){
     const canvas = await html2canvas(document.getElementById('resultsCapture'), {
       backgroundColor: '#FFFFFF',
       scale: 2,
@@ -1011,30 +1037,15 @@ document.getElementById('downloadImageBtn').addEventListener('click', async ()=>
         target.appendChild(box);
       }
     });
-    const link = document.createElement('a');
-    link.download = 'claimscrub-report-' + new Date().toISOString().slice(0,10) + '.png';
-    link.href = canvas.toDataURL('image/png');
-    link.click();
-  }catch(err){
-    console.error(err);
-    alert('Could not generate the image: ' + err.message);
-  }
-  btn.disabled = false;
-  btn.textContent = originalText;
-});
+    return await new Promise((resolve, reject) =>
+      canvas.toBlob(b => b ? resolve(b) : reject(new Error('the image could not be created')), 'image/png'));
+}
 
-document.getElementById('downloadDocBtn').addEventListener('click', async ()=>{
-  if(!lastResults){ return; }
-  const btn = document.getElementById('downloadDocBtn');
+async function buildDocxBlob(){
   if(typeof docx === 'undefined'){
-    alert('The document builder could not load (it needs an internet connection). Try the Image or Plain Text download instead, or reload the page and try again.');
-    return;
+    throw new Error('the document builder could not load (it needs an internet connection)');
   }
-  const originalLabel = btn.textContent;
-  btn.disabled = true;
-  btn.textContent = 'Preparing document...';
-
-  try{
+  {
     const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType,
             ShadingType, AlignmentType, BorderStyle, Tab } = docx;
 
@@ -1139,23 +1150,11 @@ document.getElementById('downloadDocBtn').addEventListener('click', async ()=>{
       });
     }
 
-    const link = document.createElement('a');
-    link.download = 'claimscrub-report-' + new Date().toISOString().slice(0,10) + '.docx';
-    link.href = URL.createObjectURL(blob);
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    setTimeout(()=>URL.revokeObjectURL(link.href), 4000);
-  }catch(err){
-    console.error(err);
-    alert('Could not generate the document: ' + err.message);
+    return blob;
   }
-  btn.disabled = false;
-  btn.textContent = originalLabel;
-});
+}
 
-document.getElementById('downloadTextBtn').addEventListener('click', ()=>{
-  if(!lastResults){ return; }
+function buildTextBlob(){
   const lines = [];
   lines.push('ClaimScrub — Medical Bill Audit Report');
   lines.push('Generated: ' + new Date().toLocaleString());
@@ -1192,17 +1191,46 @@ document.getElementById('downloadTextBtn').addEventListener('click', ()=>{
   lines.push('-----------------------------------------');
   lines.push('This report is general information, not legal, medical, or financial advice.');
 
-  const blob = new Blob([lines.join('\n')], {type:'text/plain'});
-  const link = document.createElement('a');
-  link.download = 'claimscrub-report-' + new Date().toISOString().slice(0,10) + '.txt';
-  link.href = URL.createObjectURL(blob);
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  // Free the file a few seconds later, not instantly: some phone browsers are
-  // still reading it when the tap returns, and the download silently fails.
-  setTimeout(() => URL.revokeObjectURL(link.href), 4000);
+  // Windows line endings + UTF-8 marker so it opens cleanly in any text editor.
+  return new Blob(['\uFEFF' + lines.join('\r\n')], {type:'text/plain;charset=utf-8'});
+}
+
+document.getElementById('downloadImageBtn').addEventListener('click', e => withBusy(e.currentTarget, 'Preparing image...', async ()=>{
+  try{ saveBlob(await buildImageBlob(), reportFileName('png')); }
+  catch(err){ console.error(err); alert('Could not generate the image: ' + err.message); }
+}));
+
+document.getElementById('downloadDocBtn').addEventListener('click', e => withBusy(e.currentTarget, 'Preparing document...', async ()=>{
+  if(!lastResults){ return; }
+  try{ saveBlob(await buildDocxBlob(), reportFileName('docx')); }
+  catch(err){ console.error(err); alert('Could not generate the document: ' + err.message + '. Try the Image or Plain Text download instead, or reload the page and try again.'); }
+}));
+
+document.getElementById('downloadTextBtn').addEventListener('click', ()=>{
+  if(!lastResults){ return; }
+  saveBlob(buildTextBlob(), reportFileName('txt'));
 });
+
+// One download with all three files, so nobody ends up with only one format.
+document.getElementById('downloadAllBtn').addEventListener('click', e => withBusy(e.currentTarget, 'Preparing your files...', async ()=>{
+  if(!lastResults){ return; }
+  if(typeof JSZip === 'undefined'){
+    alert('The zip builder could not load (it needs an internet connection). Use the three buttons below to download each file instead.');
+    return;
+  }
+  const zip = new JSZip();
+  const missing = [];
+  zip.file(reportFileName('txt'), buildTextBlob());
+  try{ zip.file(reportFileName('png'), await buildImageBlob()); }
+  catch(err){ console.error(err); missing.push('Image'); }
+  try{ zip.file(reportFileName('docx'), await buildDocxBlob()); }
+  catch(err){ console.error(err); missing.push('Word document'); }
+  const out = await zip.generateAsync({ type:'blob', mimeType:'application/zip', compression:'DEFLATE' });
+  saveBlob(out, 'claimscrub-report-' + new Date().toISOString().slice(0,10) + '-all-files.zip');
+  if(missing.length){
+    alert('Your download is ready, but the ' + missing.join(' and ') + ' could not be included. Try its button below to download it on its own.');
+  }
+}));
 
 // ---------- next steps (informational only — no letters, no auto-filing) ----------
 function renderNextSteps(results){
