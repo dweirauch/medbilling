@@ -54,6 +54,10 @@ if (fs.existsSync(WEBSITE_DIR)) {
 app.use((err, req, res, next) => {
   if (res.headersSent) return next(err);
   if (err && err.type === 'entity.parse.failed') return res.status(400).json({ error: 'Invalid JSON.' });
+  if (err && err.code === 'PAYMENTS_NOT_CONFIGURED') {
+    console.error(err.message);
+    return res.status(503).json({ error: 'Payments are not available right now. Nothing was charged.' });
+  }
   console.error('Unhandled error:', err);
   res.status(500).json({ error: 'Something went wrong. Please try again.' });
 });

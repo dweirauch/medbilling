@@ -1,0 +1,36 @@
+# Render Blueprint for ClaimScrub: one free database and one free web service.
+# Render reads this file from GitHub and creates/updates both. The web service
+# serves the website and the API from the same address.
+#
+# Stripe keys are NOT in this file on purpose (they work like passwords).
+# Add STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET on the web service's
+# Environment page in the Render dashboard. Until then the site works and
+# only payments are disabled.
+
+databases:
+  - name: claimscrub-db
+    plan: free
+    region: ohio
+    databaseName: claimscrub
+    user: claimscrub
+
+services:
+  - type: web
+    name: claimscrub
+    runtime: node
+    plan: free
+    region: ohio
+    # The server lives in claimscrub-server/ and the pages in website/. Building
+    # from the repository root keeps both in place, and a change to either one
+    # redeploys the site.
+    buildCommand: cd claimscrub-server && npm ci --omit=dev
+    startCommand: cd claimscrub-server && npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: claimscrub-db
+          property: connectionString
+      - key: NODE_VERSION
+        value: "22"
