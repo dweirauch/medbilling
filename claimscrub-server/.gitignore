@@ -1,0 +1,8 @@
+# Never commit these.
+node_modules/
+.env
+
+# Put licensed code files (AMA CPT, etc.) in this folder. It is ignored on purpose
+# so the licensed data can never end up in GitHub. Your repo may be public.
+licensed-data/*
+!licensed-data/README.txt

@@ -6,11 +6,12 @@
 // point of running this on the server is that the paywall decision (was a
 // red flag found?) can't be spoofed by a user editing client-side JS.
 //
-// When the CPT license/data file is ready, replace CPT_REF below with the
-// real licensed dataset — nothing else in this file needs to change.
+// The code list below is only a small BUILT-IN SAMPLE. The real lists are loaded
+// into the database with the importer (scripts/import-codes.js) and looked up
+// through referenceStore.js. This sample is the fallback until that happens.
 // ---------------------------------------------------------------------------
 
-const CPT_REF = {
+const DEMO_CPT_REF = {
   "99202":"Office/outpatient visit, new patient, straightforward",
   "99203":"Office/outpatient visit, new patient, low complexity",
   "99204":"Office/outpatient visit, new patient, moderate complexity",
@@ -118,14 +119,32 @@ const VALID_MODIFIERS = {
 
 const HIGH_COMPLEXITY_EM = new Set(["99215","99205","99223","99284","99285","99233"]);
 
+// A code list passed to auditItems(). get(code) -> { description, status } or undefined.
+function makeReference(codeToDescription) {
+  const map = new Map(Object.entries(codeToDescription).map(([code, description]) => [code, { description, status: 'active' }]));
+  return { source: 'demo', get: (code) => map.get(code) };
+}
+const demoReference = makeReference(DEMO_CPT_REF);
+
+// "Usually billed once per visit" vs "repeatable but capped" is a judgment about
+// each code, kept here so it does NOT depend on the wording of imported official
+// descriptions (e.g. the official chest X-ray wording doesn't contain "x-ray").
+const ONCE_PER_ENCOUNTER = new Set(Object.keys(DEMO_CPT_REF).filter(c =>
+  /visit|panel|x-ray|ultrasound|electrocardiogram|urinalysis|pregnancy test/i.test(DEMO_CPT_REF[c])));
+const REPEATABLE_BUT_CAPPED = new Set(Object.keys(DEMO_CPT_REF).filter(c =>
+  /injection|infusion|iv push/i.test(DEMO_CPT_REF[c])));
+
 /**
  * Expects an array of line items already parsed on the client:
  * { code, modifier (nullable), desc, qty, charge }
  * Returns the same array with a `flags` array attached to each item,
  * exactly matching the client-side logic in claimscrub-tool.html.
  */
-function auditItems(items) {
-  const results = items.map(it => ({ ...it, flags: [] }));
+function auditItems(items, reference = demoReference) {
+  const results = items.map(it => {
+    const known = reference.get(it.code);
+    return { ...it, description: known ? known.description : null, flags: [] };
+  });
 
   // 1. Duplicate detection
   const seen = {};
@@ -152,10 +171,13 @@ function auditItems(items) {
     }
   });
 
-  // 3. Unknown / invalid code
+  // 3. Unknown or retired code
   results.forEach(it => {
-    if (!CPT_REF[it.code]) {
+    const known = reference.get(it.code);
+    if (!known) {
       it.flags.push({ level: 'yellow', reason: 'Code not found in the standard reference set — could be valid but uncommon, or mistyped/invalid. Worth confirming.' });
+    } else if (known.status === 'retired') {
+      it.flags.push({ level: 'yellow', reason: 'This code is no longer in the current code set (it was retired in a recent update). It may be valid only for older dates of service, so it is worth confirming the date of service on the bill.' });
     }
   });
 
@@ -169,9 +191,8 @@ function auditItems(items) {
   // 5. Quantity check
   results.forEach(it => {
     if (it.charge != null && it.qty > 1) {
-      const desc = CPT_REF[it.code] || '';
-      const onceTypical = /visit|panel|x-ray|ultrasound|electrocardiogram|urinalysis|pregnancy test/i.test(desc);
-      const repeatableButCapped = /injection|infusion|iv push/i.test(desc);
+      const onceTypical = ONCE_PER_ENCOUNTER.has(it.code);
+      const repeatableButCapped = REPEATABLE_BUT_CAPPED.has(it.code);
       if (onceTypical && it.qty >= 2) {
         it.flags.push({ level: 'yellow', reason: 'Quantity of ' + it.qty + ' is unusual for a service typically billed once per encounter.' });
       } else if (repeatableButCapped && it.qty >= 8) {
@@ -181,7 +202,10 @@ function auditItems(items) {
   });
 
   // 6. Upcoding heuristic (weak signal, always yellow)
-  const hasSupportingCodes = results.some(r => !HIGH_COMPLEXITY_EM.has(r.code) && CPT_REF[r.code]);
+  const hasSupportingCodes = results.some(r => {
+    const known = reference.get(r.code);
+    return !HIGH_COMPLEXITY_EM.has(r.code) && known && known.status === 'active';
+  });
   results.forEach(it => {
     if (HIGH_COMPLEXITY_EM.has(it.code) && !hasSupportingCodes) {
       it.flags.push({ level: 'yellow', reason: 'This is a high-complexity visit code billed with no other procedure, lab, or imaging codes on the bill to support that level of complexity. This is a weak signal, not a confirmed error.' });
@@ -201,4 +225,4 @@ function summarize(results) {
   return { redCount, yellowCount, clearCount, redCharges };
 }
 
-module.exports = { CPT_REF, UNBUNDLE_PAIRS, VALID_MODIFIERS, auditItems, summarize };
+module.exports = { CPT_REF: DEMO_CPT_REF, DEMO_CPT_REF, makeReference, UNBUNDLE_PAIRS, VALID_MODIFIERS, auditItems, summarize };

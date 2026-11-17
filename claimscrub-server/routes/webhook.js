@@ -1,41 +1,61 @@
 const express = require('express');
-const Stripe = require('stripe');
-const { pool } = require('../db');
+const stripe = require('../stripeClient');
+const asyncHandler = require('../asyncHandler');
+const { fulfillCheckoutSession, recordPaymentEvent } = require('../fulfill');
 
 const router = express.Router();
-const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 
-// IMPORTANT: this route needs the RAW request body (not JSON-parsed) to
-// verify the Stripe signature. That's wired up in index.js — this route
-// must be mounted BEFORE the global express.json() middleware runs on it.
-router.post('/', express.raw({ type: 'application/json' }), async (req, res) => {
-  const sig = req.headers['stripe-signature'];
+async function handleEvent(event) {
+  const obj = event.data.object;
+
+  switch (event.type) {
+    // Instant payments (cards, wallets) arrive here already paid. Slower payment
+    // methods arrive here "unpaid" and are finished by async_payment_succeeded.
+    // fulfillCheckoutSession() checks the real payment status either way.
+    case 'checkout.session.completed':
+    case 'checkout.session.async_payment_succeeded': {
+      const result = await fulfillCheckoutSession(obj.id);
+      if (result.fulfilled) console.log('Report unlocked after payment:', result.reportId);
+      break;
+    }
+    case 'checkout.session.async_payment_failed':
+      console.warn('A delayed payment FAILED for report', obj.client_reference_id || (obj.metadata && obj.metadata.reportId));
+      break;
+
+    case 'charge.refunded':
+      await recordPaymentEvent('refunded_at', obj.payment_intent, obj.metadata, 'REFUND');
+      break;
+    case 'charge.dispute.created':
+      await recordPaymentEvent('disputed_at', obj.payment_intent, null, 'DISPUTE');
+      break;
+
+    default:
+      break; // events we don't need are acknowledged and ignored
+  }
+}
+
+// IMPORTANT: this route needs the RAW request body (not JSON-parsed) to verify
+// Stripe's signature. app.js mounts it BEFORE express.json().
+router.post('/', express.raw({ type: 'application/json' }), asyncHandler(async (req, res) => {
   let event;
-
   try {
-    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+    event = stripe.webhooks.constructEvent(req.body, req.headers['stripe-signature'], process.env.STRIPE_WEBHOOK_SECRET);
   } catch (err) {
-    console.error('webhook signature verification failed', err.message);
+    console.error('webhook signature verification failed:', err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
-  if (event.type === 'checkout.session.completed') {
-    const session = event.data.object;
-    const reportId = session.metadata && session.metadata.reportId;
-    if (reportId) {
-      try {
-        await pool.query(
-          `UPDATE reports SET paid = true, paid_at = now() WHERE id = $1`,
-          [reportId]
-        );
-        console.log('Report unlocked after payment:', reportId);
-      } catch (err) {
-        console.error('failed to mark report paid', err);
-      }
-    }
+  try {
+    await handleEvent(event);
+  } catch (err) {
+    // A real failure (database down, Stripe unreachable). Answer 500 so Stripe
+    // RETRIES this event later — answering 200 here would silently drop a paid
+    // customer's unlock with no second chance.
+    console.error(`webhook handler failed for ${event.type} (${event.id}); asking Stripe to retry`, err);
+    return res.status(500).json({ error: 'temporary failure, please retry' });
   }
 
   res.json({ received: true });
-});
+}));
 
 module.exports = router;

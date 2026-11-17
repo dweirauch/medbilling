@@ -2,6 +2,7 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { pool } = require('../db');
 const { auditItems, summarize } = require('../rulesEngine');
+const { getReference } = require('../referenceStore');
 
 const router = express.Router();
 
@@ -16,7 +17,7 @@ router.post('/', async (req, res) => {
 
   let results;
   try {
-    results = auditItems(items);
+    results = auditItems(items, await getReference());
   } catch (err) {
     console.error('audit failed', err);
     return res.status(500).json({ error: 'Could not run the audit on that data.' });

@@ -1,15 +1,21 @@
 {
   "name": "claimscrub-server",
-  "version": "1.0.0",
-  "description": "ClaimScrub backend — server-side audit verification, Stripe payment gating, and waitlist storage.",
+  "version": "1.2.0",
+  "description": "ClaimScrub backend \u2014 server-side audit verification, Stripe payment gating, and report delivery.",
   "main": "index.js",
   "type": "commonjs",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "start": "node index.js",
-    "dev": "node --watch index.js"
+    "dev": "node --watch index.js",
+    "test": "node --test test/*.test.js",
+    "import-codes": "node scripts/import-codes.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
+    "csv-parse": "^7.0.3",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "pg": "^8.12.0",
